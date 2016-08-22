@@ -5,36 +5,37 @@ class Prom {
         this._promiseCb = promiseCb;
         this._setPending();
         this._value = undefined;
-        this._resolveCb = undefined;
-        this._rejectCb = undefined;
+        this._reason = undefined;
+        this._onFulfilled = undefined;
+        this._onRejected = undefined;
     }
 
-    then(resolveCb, rejectCb) {
+    then(onFulfilled, onRejected) {
         if (this._promiseCb && this._isPending()) {
-            this._resolveCb = resolveCb;
-            this._rejectCb = rejectCb;
+            this._onFulfilled = onFulfilled;
+            this._onRejected = onRejected;
 
-            this._promiseCb(this._doResolve, this._doReject);
+            this._promiseCb(this._doFulfill, this._doReject);
         }
     }
 
-    catch(rejectCb) {
-        return this.then(null, rejectCb);
+    catch(onRejected) {
+        return this.then(null, onRejected);
     }
 
-    static resolve(res) {
-        if (res instanceof Prom) {
-            return res;
+    static resolve(value) {
+        if (this._isProm(value)) {
+            return value;
         }
 
         return new Prom((resolve) => {
-            resolve(res);
+            resolve(value);
         });
     }
 
-    static reject(res) {
+    static reject(reason) {
         return new Prom((resolve, reject) => {
-            reject(res);
+            reject(reason);
         });
     }
 
@@ -54,21 +55,21 @@ class Prom {
         if (Array.isArray(promiseArr)) {
             return new Prom((resolve, reject) => {
                 let remaining = promiseArr.length;
-                const results = [];
+                const values = [];
 
                 if (remaining === 0) {
-                    resolve(results);
+                    resolve(values);
                 }
                 else {
                     promiseArr.forEach((prom, i) => {
-                        prom.then((result) => {
-                            results[i] = result;
+                        prom.then((value) => {
+                            values[i] = value;
 
                             if (--remaining === 0) {
-                                resolve(results);
+                                resolve(values);
                             }
-                        }, (err) => {
-                            resolve(reject(err));
+                        }, (reason) => {
+                            resolve(reject(reason));
                         });
                     });
                 }
@@ -78,38 +79,83 @@ class Prom {
         return Prom.reject('Error: Prom.all\'s parameter must be an array');
     }
 
-    _doResolve = (res) => {
+    _doFulfill = (value) => {
         if (this._isPending()) {
-            this._setResolved();
-            this._value = res;
+            this._setFulfilled();
+            this._value = value;
 
-            if (typeof this._resolveCb === 'function') {
-                this._resolveCb(res);
+            if (typeof this._onFulfilled === 'function') {
+                this._onFulfilled(value);
             }
         }
     }
 
-    _doReject = (res) => {
+    _doReject = (reason) => {
         if (this._isPending()) {
             this._setRejected();
-            this._value = res;
+            this._reason = reason;
 
-            if (typeof this._rejectCb === 'function') {
-                this._rejectCb(res);
+            if (typeof this._onRejected === 'function') {
+                this._onRejected(reason);
             }
             else {
-                console.error(`Uncaught (in promise) ${res}`);
+                console.error(`Uncaught (in promise) ${reason}`);
             }
         }
     }
 
-    _isPending = () => this._state === 0
-    _isResolved = () => this._state === 1
-    _isRejected = () => this._state === 2
+    _async = (cb) => {
+        setTimeout(cb);
+    }
+
+    _isProm = (promise) => promise instanceof Prom;
+
+    _isPending = () => this._state === 0;
+    _isFulfilled = () => this._state === 1;
+    _isRejected = () => this._state === 2;
+
     _setPending = () => { this._state = 0; }
-    _setResolved = () => { this._state = 1; }
+    _setFulfilled = () => { this._state = 1; }
     _setRejected = () => { this._state = 2; }
 }
+
+/**
+ * Test if promise is async
+ * Success if the order is 1, 2, 3
+ */
+console.log('Test async', 1);
+new Prom((resolve) => {
+    resolve();
+}).then(() => {
+    console.log('Test async', 3);
+});
+console.log('Test async', 2);
+
+/*
+ * Test chaining
+ * TODO
+ */
+// function testChaining() {
+//     return new Prom((resolve, reject) => {
+//         setTimeout(() => {
+//             const rand = Math.random();
+
+//             if (rand >= 0.5) {
+//                 resolve(rand);
+//             }
+//             else {
+//                 reject(rand);
+//             }
+//         }, 1000);
+//     });
+// }
+
+// testChaining().then((result) => {
+//     console.log('Chaining Success 1', result);
+//     return result;
+// }).then((result) => {
+//     console.log('Chaining Failure 2', result);
+// });
 
 /*
  * Test basic new Prom() functionality
@@ -215,26 +261,14 @@ Prom.all(testAll()).then((results) => {
     console.log('All Failure', results);
 });
 
-/*
- * Test chaining
+/**
+ * Test - resolve rejected promise
+ * TODO
  */
-// function testChaining() {
-//     return new Prom((resolve, reject) => {
-//         setTimeout(() => {
-//             const rand = Math.random();
-
-//             if (rand >= 0.5) {
-//                 resolve(rand);
-//             }
-//             else {
-//                 reject(rand);
-//             }
-//         }, 1000);
-//     });
-// }
-
-// testChaining().then((result) => {
-//     console.log('Chaining Success', result);
-// }).then(undefined, (result) => {
-//     console.log('Chaining Failure', result);
+// new Prom((resolve) => {
+//     resolve(Prom().reject(aa));
+// }).then((result) => {
+//     console.log('Success', result);
+// }, (result) => {
+//     console.log('Failure', result);
 // });
