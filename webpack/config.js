@@ -3,7 +3,7 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 const commons = require('./common.js');
 
 module.exports = {
-    title: 'Simpor Promise',
+    title: 'Simple Promise',
     baseUrl: '/',
     host: 'localhost',
     port: 3000,
@@ -14,7 +14,6 @@ module.exports = {
         main: [
             'babel-polyfill',
             './src/main',
-            'webpack-hot-middleware/client',
         ]
     },
 
@@ -60,7 +59,6 @@ module.exports = {
         new webpack.DefinePlugin({
             'process.env.NODE_ENV': '"development"'
         }),
-        new webpack.HotModuleReplacementPlugin(),
         new webpack.NoErrorsPlugin(),
     ]
 };
