@@ -1,6 +1,6 @@
 *.sublime-project
 *.sublime-workspace
+logs
 *.log
 node_modules
 .DS_Store
-dist
