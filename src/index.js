@@ -8,7 +8,7 @@ const REJECTED = 2;
 export default class SimplePromise {
     constructor(resolver) {
         if (!isFunction(resolver)) {
-            throw new TypeError(`SimplePromise resolver ${resolver} is not a function`);
+            throw new TypeError('You must pass a resolver function as the first argument to the promise constructor');
         }
 
         this.callbacks = [];
