@@ -14,8 +14,8 @@ export default function SimplePromise(resolver) {
     this.state = PENDING;
 
     const transition = (state, x) => {
-        if (this.state === PENDING) {
-            setTimeout(() => {
+        setTimeout(() => {
+            if (this.state === PENDING) {
                 this.state = state;
                 this.x = x;
 
@@ -27,8 +27,8 @@ export default function SimplePromise(resolver) {
                         cb.onRejected(x);
                     }
                 });
-            });
-        }
+            }
+        });
     };
 
     function resolve(value) {
@@ -193,9 +193,6 @@ SimplePromise.all = function (promises) {
     });
 };
 
-/**
- * TODO - bug, then is called for every resolved promise
- */
 SimplePromise.race = function (promises) {
     if (!Array.isArray(promises)) {
         return SimplePromise.reject(new TypeError('You must pass an array to SimplePromise.race.'));
