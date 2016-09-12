@@ -5,202 +5,206 @@ const PENDING = 0;
 const FULFILLED = 1;
 const REJECTED = 2;
 
-export default function SimplePromise(resolver) {
-    if (!isFunction(resolver)) {
-        throw new TypeError(`SimplePromise resolver ${resolver} is not a function`);
-    }
-
-    this.callbacks = [];
-    this.state = PENDING;
-
-    const transition = (state, x) => {
-        setTimeout(() => {
-            if (this.state === PENDING) {
-                this.state = state;
-                this.x = x;
-
-                this.callbacks.forEach((cb) => {
-                    if (state === FULFILLED) {
-                        cb.onFulfilled(x);
-                    }
-                    else {
-                        cb.onRejected(x);
-                    }
-                });
-            }
-        });
-    };
-
-    function resolve(value) {
-        if (value instanceof SimplePromise) {
-            value.then(resolve, reject);
+export default class SimplePromise {
+    constructor(resolver) {
+        if (!isFunction(resolver)) {
+            throw new TypeError(`SimplePromise resolver ${resolver} is not a function`);
         }
-        else {
-            transition(FULFILLED, value);
-        }
-    }
 
-    function reject(reason) {
-        transition(REJECTED, reason);
-    }
+        this.callbacks = [];
+        this.state = PENDING;
 
-    try {
-        resolver(resolve, reject);
-    }
-    catch (e) {
-        reject(e);
-    }
-}
+        const transition = (state, x) => {
+            setTimeout(() => {
+                if (this.state === PENDING) {
+                    this.state = state;
+                    this.x = x;
 
-function resolvePromise(promise, x, resolve, reject) {
-    if (promise === x) {
-        reject(new TypeError('You cannot resolve a promise with itself'));
-    }
-    else if (x instanceof SimplePromise) {
-        if (x.state === PENDING) {
-            x.then((v) => {
-                resolvePromise(promise, v, resolve, reject);
-            }, reject);
-        }
-        else {
-            x.then(resolve, reject);
-        }
-    }
-    else if (x !== null && (isObject(x) || isFunction(x))) {
-        let thenCalledOrThrow = false;
+                    this.callbacks.forEach((cb) => {
+                        if (state === FULFILLED) {
+                            cb.onFulfilled(x);
+                        }
+                        else {
+                            cb.onRejected(x);
+                        }
+                    });
+                }
+            });
+        };
 
-        try {
-            const then = x.then;
-
-            if (isFunction(then)) {
-                then.call(x, (y) => {
-                    if (!thenCalledOrThrow) {
-                        thenCalledOrThrow = true;
-                        resolvePromise(promise, y, resolve, reject);
-                    }
-                }, (r) => {
-                    if (!thenCalledOrThrow) {
-                        thenCalledOrThrow = true;
-                        reject(r);
-                    }
-                });
+        function resolve(value) {
+            if (SimplePromise.isSimplePromise(value)) {
+                value.then(resolve, reject);
             }
             else {
-                resolve(x);
+                transition(FULFILLED, value);
             }
         }
-        catch (e) {
-            if (!thenCalledOrThrow) {
-                thenCalledOrThrow = true;
-                reject(e);
-            }
+
+        function reject(reason) {
+            transition(REJECTED, reason);
         }
-    }
-    else {
-        resolve(x);
-    }
-}
 
-SimplePromise.prototype.then = function (onFulfilled, onRejected) {
-    const onFulfill = isFunction(onFulfilled) ? onFulfilled : (v) => v;
-    const onReject = isFunction(onRejected) ? onRejected : (r) => {
-        throw r;
-    };
-
-    let promise2;
-
-    function schedulePromiseResolution(resolve, reject, state, value) {
         try {
-            const x = (state === FULFILLED) ? onFulfill(value) : onReject(value);
-            resolvePromise(promise2, x, resolve, reject);
+            resolver(resolve, reject);
         }
         catch (e) {
             reject(e);
         }
     }
 
-    if (this.state === PENDING) {
-        promise2 = new SimplePromise((resolve, reject) => {
-            this.callbacks.push({
-                onFulfilled: (value) => {
-                    schedulePromiseResolution(resolve, reject, FULFILLED, value);
-                },
-                onRejected: (reason) => {
-                    schedulePromiseResolution(resolve, reject, REJECTED, reason);
-                },
-            });
-        });
-    }
-    else {
-        promise2 = new SimplePromise((resolve, reject) => {
-            setTimeout(() => {
-                schedulePromiseResolution(resolve, reject, this.state, this.x);
-            });
-        });
-    }
+    then(onFulfilled, onRejected) {
+        const onFulfill = isFunction(onFulfilled) ? onFulfilled : (v) => v;
+        const onReject = isFunction(onRejected) ? onRejected : (r) => {
+            throw r;
+        };
 
-    return promise2;
-};
+        let promise2;
 
-SimplePromise.prototype.catch = function (onRejected) {
-    return this.then(null, onRejected);
-};
+        function resolvePromise(promise, x, resolve, reject) {
+            if (promise === x) {
+                reject(new TypeError('You cannot resolve a promise with itself'));
+            }
+            else if (SimplePromise.isSimplePromise(x)) {
+                if (x.state === PENDING) {
+                    x.then((v) => {
+                        resolvePromise(promise, v, resolve, reject);
+                    }, reject);
+                }
+                else {
+                    x.then(resolve, reject);
+                }
+            }
+            else if (x !== null && (isObject(x) || isFunction(x))) {
+                let thenCalledOrThrow = false;
 
-SimplePromise.prototype.finally = function (cb) {
-    return this.then((v) => {
-        setTimeout(cb);
-        return v;
-    }, (r) => {
-        setTimeout(cb);
-        throw r;
-    });
-};
+                try {
+                    const then = x.then;
 
-SimplePromise.resolve = function (value) {
-    return new SimplePromise((resolve) => {
-        resolve(value);
-    });
-};
-
-SimplePromise.reject = function (reason) {
-    return new SimplePromise((resolve, reject) => {
-        reject(reason);
-    });
-};
-
-SimplePromise.all = function (promises) {
-    if (!Array.isArray(promises)) {
-        return SimplePromise.reject(new TypeError('You must pass an array to SimplePromise.all.'));
-    }
-
-    return new SimplePromise((resolve, reject) => {
-        let remaining = promises.length;
-        const values = [];
-
-        if (remaining === 0) {
-            resolve(values);
+                    if (isFunction(then)) {
+                        then.call(x, (y) => {
+                            if (!thenCalledOrThrow) {
+                                thenCalledOrThrow = true;
+                                resolvePromise(promise, y, resolve, reject);
+                            }
+                        }, (r) => {
+                            if (!thenCalledOrThrow) {
+                                thenCalledOrThrow = true;
+                                reject(r);
+                            }
+                        });
+                    }
+                    else {
+                        resolve(x);
+                    }
+                }
+                catch (e) {
+                    if (!thenCalledOrThrow) {
+                        thenCalledOrThrow = true;
+                        reject(e);
+                    }
+                }
+            }
+            else {
+                resolve(x);
+            }
         }
 
-        promises.forEach((promise, i) => {
-            SimplePromise.resolve(promise).then((value) => {
-                values[i] = value;
+        function schedulePromiseResolution(resolve, reject, state, value) {
+            try {
+                const x = (state === FULFILLED) ? onFulfill(value) : onReject(value);
+                resolvePromise(promise2, x, resolve, reject);
+            }
+            catch (e) {
+                reject(e);
+            }
+        }
 
-                if (--remaining === 0) {
-                    resolve(values);
-                }
-            }, (reason) => reject(reason));
-        });
-    });
-};
+        if (this.state === PENDING) {
+            promise2 = new SimplePromise((resolve, reject) => {
+                this.callbacks.push({
+                    onFulfilled: (value) => {
+                        schedulePromiseResolution(resolve, reject, FULFILLED, value);
+                    },
+                    onRejected: (reason) => {
+                        schedulePromiseResolution(resolve, reject, REJECTED, reason);
+                    },
+                });
+            });
+        }
+        else {
+            promise2 = new SimplePromise((resolve, reject) => {
+                setTimeout(() => {
+                    schedulePromiseResolution(resolve, reject, this.state, this.x);
+                });
+            });
+        }
 
-SimplePromise.race = function (promises) {
-    if (!Array.isArray(promises)) {
-        return SimplePromise.reject(new TypeError('You must pass an array to SimplePromise.race.'));
+        return promise2;
     }
 
-    return new SimplePromise((resolve, reject) => {
-        promises.forEach((promise) => {
-            SimplePromise.resolve(promise).then(resolve, reject);
+    catch(onRejected) {
+        return this.then(null, onRejected);
+    }
+
+    finally(cb) {
+        return this.then((v) => {
+            setTimeout(cb);
+            return v;
+        }, (r) => {
+            setTimeout(cb);
+            throw r;
         });
-    });
-};
+    }
+
+    static resolve(value) {
+        return new SimplePromise((resolve) => {
+            resolve(value);
+        });
+    }
+
+    static reject(reason) {
+        return new SimplePromise((resolve, reject) => {
+            reject(reason);
+        });
+    }
+
+    static all(promises) {
+        if (!Array.isArray(promises)) {
+            return SimplePromise.reject(new TypeError('You must pass an array to SimplePromise.all.'));
+        }
+
+        return new SimplePromise((resolve, reject) => {
+            let remaining = promises.length;
+            const values = [];
+
+            if (remaining === 0) {
+                resolve(values);
+            }
+
+            promises.forEach((promise, i) => {
+                SimplePromise.resolve(promise).then((value) => {
+                    values[i] = value;
+
+                    if (--remaining === 0) {
+                        resolve(values);
+                    }
+                }, (reason) => reject(reason));
+            });
+        });
+    }
+
+    static race(promises) {
+        if (!Array.isArray(promises)) {
+            return SimplePromise.reject(new TypeError('You must pass an array to SimplePromise.race.'));
+        }
+
+        return new SimplePromise((resolve, reject) => {
+            promises.forEach((promise) => {
+                SimplePromise.resolve(promise).then(resolve, reject);
+            });
+        });
+    }
+
+    static isSimplePromise = (sp) => sp instanceof SimplePromise;
+}
