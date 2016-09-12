@@ -13,14 +13,6 @@ export default function SimplePromise(resolver) {
     this.callbacks = [];
     this.state = PENDING;
 
-    // TODO - bug when rejecting with new TypeError, the original message is hidden
-    try {
-        resolver(resolve, reject);
-    }
-    catch (e) {
-        reject(e);
-    }
-
     const transition = (state, x) => {
         if (this.state === PENDING) {
             setTimeout(() => {
@@ -51,10 +43,16 @@ export default function SimplePromise(resolver) {
     function reject(reason) {
         transition(REJECTED, reason);
     }
+
+    try {
+        resolver(resolve, reject);
+    }
+    catch (e) {
+        reject(e);
+    }
 }
 
 function resolvePromise(promise, x, resolve, reject) {
-    // TODO - bug with rejecting with new TypeError
     if (promise === x) {
         reject(new TypeError('You cannot resolve a promise with itself'));
     }
@@ -171,7 +169,6 @@ SimplePromise.reject = function (reason) {
 };
 
 SimplePromise.all = function (promises) {
-    // TODO - bug with rejecting with new TypeError
     if (!Array.isArray(promises)) {
         return SimplePromise.reject(new TypeError('You must pass an array to SimplePromise.all.'));
     }
@@ -200,7 +197,6 @@ SimplePromise.all = function (promises) {
  * TODO - bug, then is called for every resolved promise
  */
 SimplePromise.race = function (promises) {
-    // TODO - bug with rejecting with new TypeError
     if (!Array.isArray(promises)) {
         return SimplePromise.reject(new TypeError('You must pass an array to SimplePromise.race.'));
     }
